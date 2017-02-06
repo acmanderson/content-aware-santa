@@ -1,0 +1,8 @@
+{
+    "dev": {
+        "app_function": "app.app", 
+        "s3_bucket": "zappa-4auq2txnh",
+        "keep_warm": false,
+        "http_methods": ["POST"]
+    }
+}
