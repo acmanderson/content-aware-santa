@@ -1,3 +1,4 @@
 Flask==0.12
 zappa==0.35.1
 git+git://github.com/acmanderson/wand.git@7e2992576eb0423d227ea570da878470c4d3600d
+schema==0.6.5

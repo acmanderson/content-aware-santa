@@ -1,106 +1,74 @@
-import base64
-import numbers
 import os
+from base64 import b64encode, b64decode
 
 from flask import Flask, request, jsonify
-from wand import exceptions
-from wand.api import library
-from wand.image import Image
+from schema import Schema, And, Use, Optional, SchemaError
+
+from content_aware_image import ContentAwareImage
 
 app = Flask(__name__)
 
+RESCALE_DEFAULT = 50
+RESCALE_SCHEMA = And(Use(int), lambda n: 1 <= n <= 100)
 
-class ContentAwareImage(Image):
-    def __init__(self, *args, **kwargs):
-        super(ContentAwareImage, self).__init__(*args, **kwargs)
-        self.original_size = self.size
 
-    def clone(self):
-        return ContentAwareImage(image=self)
+def debug():
+    return app.debug or os.getenv('STAGE') == 'dev'
 
-    def content_aware_scale(self, width, height, start_width, start_height, units_percent=True, delta_x=1, rigidity=0):
-        if not isinstance(width, numbers.Integral):
-            raise TypeError('width must be an integer, not ' + repr(width))
-        elif not isinstance(height, numbers.Integral):
-            raise TypeError('height must be an integer, not ' + repr(height))
-        elif not isinstance(start_width, numbers.Integral):
-            raise TypeError('start_width must be an integer, not ' + repr(height))
-        elif not isinstance(start_height, numbers.Integral):
-            raise TypeError('start_height must be an integer, not ' + repr(height))
-        elif not isinstance(delta_x, numbers.Real):
-            raise TypeError('delta_x must be a float, not ' + repr(delta_x))
-        elif not isinstance(rigidity, numbers.Real):
-            raise TypeError('rigidity must be a float, not ' + repr(rigidity))
 
-        original_width, original_height = self.original_size
-        if units_percent:
-            width = int(original_width * float(width) / 100)
-            height = int(original_height * float(height) / 100)
-            start_width = int(original_width * float(start_width) / 100)
-            start_height = int(original_height * float(start_height) / 100)
-
-        if self.animation:
-            self.wand = library.MagickCoalesceImages(self.wand)
-            library.MagickSetLastIterator(self.wand)
-            n = library.MagickGetIteratorIndex(self.wand)
-            library.MagickResetIterator(self.wand)
-
-            num_frames = len(self.sequence)
-            rescale_width_step = float(start_width - width) / num_frames
-            rescale_height_step = float(start_height - height) / num_frames
-            for i in xrange(n + 1):
-                rescale_width = int(start_width - rescale_width_step * i)
-                rescale_height = int(start_height - rescale_height_step * i)
-                library.MagickSetIteratorIndex(self.wand, i)
-                # sampling up before doing the liquid rescale results in better image quality but is much slower
-                # than doing it this way
-                library.MagickLiquidRescaleImage(self.wand, rescale_width, rescale_height, float(delta_x),
-                                                 float(rigidity))
-                library.MagickSampleImage(self.wand, original_width, original_height)
+def base64_to_image(b64):
+    try:
+        decoded = b64decode(b64)
+        return ContentAwareImage(blob=decoded)
+    except Exception as e:
+        if debug():
+            raise e
         else:
-            library.MagickLiquidRescaleImage(self.wand, width, height, float(delta_x), float(rigidity))
-            library.MagickSampleImage(self.wand, original_width, original_height)
-        library.MagickSetSize(self.wand, original_width, original_height)
+            # raise generic error that is appropriate to return to a user
+            raise SchemaError("Could not decode image.")
 
-        try:
-            self.raise_exception()
-        except exceptions.MissingDelegateError as e:
-            raise exceptions.MissingDelegateError(
-                str(e) + '\n\nImageMagick in the system is likely to be '
-                         'impossible to load liblqr.  You might not install liblqr, '
-                         'or ImageMagick may not compiled with liblqr.'
-            )
+
+schema = Schema({
+    'image': Use(base64_to_image),
+    Optional('rescale_width', default=RESCALE_DEFAULT): RESCALE_SCHEMA,
+    Optional('rescale_height', default=RESCALE_DEFAULT): RESCALE_SCHEMA,
+    Optional('start_width'): RESCALE_SCHEMA,
+    Optional('start_height'): RESCALE_SCHEMA,
+})
+
+
+@app.errorhandler(SchemaError)
+def handle_schema_error(error):
+    response = jsonify({'message': error.message, 'error': True})
+    response.status_code = 400
+    return response
+
+
+@app.errorhandler(Exception)
+def handle_exception(error):
+    if debug():
+        message = error.message
+    else:
+        message = 'An error occurred.'
+    response = jsonify({'message': message, 'error': True})
+    response.status_code = 500
+    return response
 
 
 @app.route('/', methods=['POST'])
 def index():
-    # need to update the LD_LIBRARY_PATH environment variable so ImageMagick will find its dependencies in the
-    # build dir
-    ld_library_path = os.getenv('LD_LIBRARY_PATH')
-    dependencies_dir = [os.path.join(os.getcwd(), 'build', 'lib')]
-    if dependencies_dir[0] not in ld_library_path:
-        if ld_library_path:
-            dependencies_dir.append(ld_library_path)
-        os.environ['LD_LIBRARY_PATH'] = ':'.join(dependencies_dir)
+    body = schema.validate(request.get_json())
+    image = body['image']
+    rescale_width = body['rescale_width']
+    rescale_height = body['rescale_height']
+    start_width = body.get('start_width', rescale_width)
+    start_height = body.get('start_height', rescale_height)
 
-    body = request.get_json()
-    image_b64 = body['image_b64']
-    rescale_x = body.get('rescale_x', 50)
-    rescale_y = body.get('rescale_y', 50)
-    start_x = body.get('start_x', rescale_x)
-    start_y = body.get('start_y', rescale_y)
+    with image as rescaled:
+        rescaled.content_aware_scale(rescale_width, rescale_height, start_width, start_height)
 
-    rescaled = rescale_image(base64.b64decode(image_b64), rescale_x, rescale_y, start_x, start_y)
-
-    return jsonify({'image_b64': base64.b64encode(rescaled)})
-
-
-def rescale_image(image, rescale_x, rescale_y, start_x, start_y):
-    with ContentAwareImage(blob=image) as img:
-        img.content_aware_scale(rescale_x, rescale_y, start_x, start_y)
-
-        return img.make_blob()
+        return jsonify({'image': b64encode(rescaled.make_blob())})
 
 
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True)
