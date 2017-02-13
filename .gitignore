@@ -1,5 +1,4 @@
 env/
 build/
 .idea/
-zappa_settings.json
 *.pyc
