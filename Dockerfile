@@ -1,5 +1,6 @@
 FROM lambci/lambda:build
 
+ENV BASE_DIR /var/task
 ENV LQR_VERSION 0.4.2
 ENV IMAGEMAGICK_VERSION 6.9.7-7
 ENV PKG_CONFIG_PATH /usr/lib/pkgconfig/:$PKG_CONFIG_PATH
@@ -8,30 +9,33 @@ RUN yum install -y \
     glib2-devel \
     libjpeg-devel \
     libpng-devel \
-    wget; yum clean all
+    wget; \
+    yum clean all
 
-WORKDIR /var/task
+WORKDIR $BASE_DIR
 RUN wget http://liblqr.wdfiles.com/local--files/en:download-page/liblqr-1-${LQR_VERSION}.tar.bz2 && \
     tar -vxjf liblqr-1-${LQR_VERSION}.tar.bz2
-WORKDIR /var/task/liblqr-1-${LQR_VERSION}
+WORKDIR $BASE_DIR/liblqr-1-${LQR_VERSION}
 RUN ./configure && \
     make && \
     make install
-WORKDIR /var/task
+WORKDIR $BASE_DIR
 
 RUN wget https://www.imagemagick.org/download/ImageMagick-${IMAGEMAGICK_VERSION}.tar.gz && \
     tar xvzf ImageMagick-${IMAGEMAGICK_VERSION}.tar.gz
-WORKDIR /var/task/ImageMagick-${IMAGEMAGICK_VERSION}
-RUN ./configure --prefix=/var/task/build && \
+WORKDIR $BASE_DIR/ImageMagick-${IMAGEMAGICK_VERSION}
+RUN ./configure --prefix=$BASE_DIR/build --disable-static --without-magick-plus-plus --without-perl && \
     make && \
     make install && \
-    mkdir /var/task/build/ImageMagick-${IMAGEMAGICK_VERSION} && \
+    mkdir -p $BASE_DIR/build/ImageMagick-${IMAGEMAGICK_VERSION} && \
     cp \
         /usr/lib64/libjpeg* \
         /usr/lib/liblqr-1* \
         /usr/lib64/libglib* \
         /usr/lib64/libpng* \
-    /var/task/build/lib/
-WORKDIR /var/task/
+    $BASE_DIR/build/lib/
+WORKDIR $BASE_DIR
 
-ENV MAGICK_HOME /var/task/build
+RUN rm -rf $BASE_DIR/build/share/doc $BASE_DIR/build/share/man
+
+ENV MAGICK_HOME $BASE_DIR/build
