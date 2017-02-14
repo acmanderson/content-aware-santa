@@ -65,7 +65,8 @@ def index():
     start_height = body.get('start_height', rescale_height)
 
     with image as rescaled:
-        rescaled.content_aware_scale(rescale_width, rescale_height, start_width, start_height)
+        rescaled.content_aware_scale(rescale_width, rescale_height, start_width, start_height,
+                                     use_slow_scaling='USE_SLOW_SCALING' in os.environ)
 
         return jsonify({'image': b64encode(rescaled.make_blob())})
 

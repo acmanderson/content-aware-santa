@@ -19,7 +19,8 @@ class ContentAwareImage(Image):
     def clone(self):
         return ContentAwareImage(image=self)
 
-    def content_aware_scale(self, width, height, start_width, start_height, units_percent=True, delta_x=1, rigidity=0):
+    def content_aware_scale(self, width, height, start_width, start_height, units_percent=True, use_slow_scaling=False,
+                            delta_x=1, rigidity=0):
         if not isinstance(width, numbers.Integral):
             raise TypeError('width must be an integer, not ' + repr(width))
         elif not isinstance(height, numbers.Integral):
@@ -52,14 +53,29 @@ class ContentAwareImage(Image):
                 rescale_width = int(start_width - rescale_width_step * i)
                 rescale_height = int(start_height - rescale_height_step * i)
                 library.MagickSetIteratorIndex(self.wand, i)
-                # sampling up before doing the liquid rescale results in better image quality but is much slower
-                # than doing it this way
-                library.MagickLiquidRescaleImage(self.wand, rescale_width, rescale_height, float(delta_x),
-                                                 float(rigidity))
-                library.MagickSampleImage(self.wand, original_width, original_height)
+                if not use_slow_scaling:
+                    # sampling up before doing the liquid rescale results in better image quality but is much slower
+                    # than doing it this way
+                    library.MagickLiquidRescaleImage(self.wand, rescale_width, rescale_height, float(delta_x),
+                                                     float(rigidity))
+                    library.MagickSampleImage(self.wand, original_width, original_height)
+                else:
+                    library.MagickSampleImage(self.wand,
+                                              int(float(original_width) / rescale_width * original_width),
+                                              int(float(original_height) / rescale_height * original_height))
+                    library.MagickLiquidRescaleImage(self.wand, original_width, original_height, float(delta_x),
+                                                     float(rigidity))
         else:
-            library.MagickLiquidRescaleImage(self.wand, width, height, float(delta_x), float(rigidity))
-            library.MagickSampleImage(self.wand, original_width, original_height)
+            if not use_slow_scaling:
+                library.MagickLiquidRescaleImage(self.wand, width, height, float(delta_x), float(rigidity))
+                library.MagickSampleImage(self.wand, original_width, original_height)
+            else:
+                library.MagickSampleImage(self.wand,
+                                          int(float(original_width) / width * original_width),
+                                          int(float(original_height) / height * original_height))
+                library.MagickLiquidRescaleImage(self.wand, original_width, original_height, float(delta_x),
+                                                 float(rigidity))
+
         library.MagickSetSize(self.wand, original_width, original_height)
 
         try:
