@@ -8,7 +8,13 @@ from wand.image import Image
 class ContentAwareImage(Image):
     def __init__(self, *args, **kwargs):
         super(ContentAwareImage, self).__init__(*args, **kwargs)
-        self.original_size = self.size
+        if self.animation:
+            # MagickWand doesn't seem to get the proper size for gifs with
+            # variable frame sizes, so find the max width and height and use those
+            frame_sizes = zip(*[frame.size for frame in self.sequence])
+            self.original_size = max(frame_sizes[0]), max(frame_sizes[1])
+        else:
+            self.original_size = self.size
 
     def clone(self):
         return ContentAwareImage(image=self)
@@ -37,13 +43,12 @@ class ContentAwareImage(Image):
         if self.animation:
             self.wand = library.MagickCoalesceImages(self.wand)
             library.MagickSetLastIterator(self.wand)
-            n = library.MagickGetIteratorIndex(self.wand)
+            num_frames = library.MagickGetIteratorIndex(self.wand)
             library.MagickResetIterator(self.wand)
 
-            num_frames = len(self.sequence)
             rescale_width_step = float(start_width - width) / num_frames
             rescale_height_step = float(start_height - height) / num_frames
-            for i in xrange(n + 1):
+            for i in xrange(num_frames + 1):
                 rescale_width = int(start_width - rescale_width_step * i)
                 rescale_height = int(start_height - rescale_height_step * i)
                 library.MagickSetIteratorIndex(self.wand, i)

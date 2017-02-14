@@ -9,7 +9,7 @@ from content_aware_image import ContentAwareImage
 app = Flask(__name__)
 
 RESCALE_DEFAULT = 50
-RESCALE_SCHEMA = And(Use(int), lambda n: 1 <= n <= 100)
+RESCALE_SCHEMA = And(Use(int), lambda n: n > 0)
 
 
 def debug():
