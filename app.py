@@ -1,4 +1,5 @@
 import os
+import traceback
 from base64 import b64encode, b64decode
 
 from flask import Flask, request, jsonify
@@ -39,15 +40,15 @@ schema = Schema({
 
 @app.errorhandler(SchemaError)
 def handle_schema_error(error):
-    response = jsonify({'message': error.message, 'error': True})
+    response = jsonify({'message': str(error), 'error': True})
     response.status_code = 400
     return response
 
 
 @app.errorhandler(Exception)
-def handle_exception(error):
+def handle_exception(_):
     if debug():
-        message = error.message
+        message = traceback.format_exc()
     else:
         message = 'An error occurred.'
     response = jsonify({'message': message, 'error': True})
@@ -67,8 +68,7 @@ def index():
     with image as rescaled:
         rescaled.content_aware_scale(rescale_width, rescale_height, start_width, start_height,
                                      use_slow_scaling='USE_SLOW_SCALING' in os.environ)
-
-        return jsonify({'image': b64encode(rescaled.make_blob())})
+        return jsonify({'image': b64encode(rescaled.make_blob()).decode('utf-8')})
 
 
 if __name__ == '__main__':

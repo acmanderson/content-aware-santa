@@ -1,4 +1,5 @@
 import numbers
+from concurrent.futures import ThreadPoolExecutor
 
 from wand import exceptions
 from wand.api import library
@@ -11,8 +12,8 @@ class ContentAwareImage(Image):
         if self.animation:
             # MagickWand doesn't seem to get the proper size for gifs with
             # variable frame sizes, so find the max width and height and use those
-            frame_sizes = zip(*[frame.size for frame in self.sequence])
-            self.original_size = max(frame_sizes[0]), max(frame_sizes[1])
+            frame_sizes_x, frame_sizes_y = zip(*[frame.size for frame in self.sequence])
+            self.original_size = max(frame_sizes_x), max(frame_sizes_y)
         else:
             self.original_size = self.size
 
@@ -34,38 +35,40 @@ class ContentAwareImage(Image):
         elif not isinstance(rigidity, numbers.Real):
             raise TypeError('rigidity must be a float, not ' + repr(rigidity))
 
-        original_width, original_height = self.original_size
-        if units_percent:
-            width = int(original_width * float(width) / 100)
-            height = int(original_height * float(height) / 100)
-            start_width = int(original_width * float(start_width) / 100)
-            start_height = int(original_height * float(start_height) / 100)
-
         if self.animation:
             self.wand = library.MagickCoalesceImages(self.wand)
-            library.MagickSetLastIterator(self.wand)
-            num_frames = library.MagickGetIteratorIndex(self.wand)
-            library.MagickResetIterator(self.wand)
 
+            num_frames = len(self.sequence)
             rescale_width_step = float(start_width - width) / num_frames
             rescale_height_step = float(start_height - height) / num_frames
-            for i in xrange(num_frames + 1):
-                rescale_width = int(start_width - rescale_width_step * i)
-                rescale_height = int(start_height - rescale_height_step * i)
-                library.MagickSetIteratorIndex(self.wand, i)
-                if not use_slow_scaling:
-                    # sampling up before doing the liquid rescale results in better image quality but is much slower
-                    # than doing it this way
-                    library.MagickLiquidRescaleImage(self.wand, rescale_width, rescale_height, float(delta_x),
-                                                     float(rigidity))
-                    library.MagickSampleImage(self.wand, original_width, original_height)
-                else:
-                    library.MagickSampleImage(self.wand,
-                                              int(float(original_width) / rescale_width * original_width),
-                                              int(float(original_height) / rescale_height * original_height))
-                    library.MagickLiquidRescaleImage(self.wand, original_width, original_height, float(delta_x),
-                                                     float(rigidity))
+
+            def _rescale_frame(index):
+                rescale_width = int(start_width - rescale_width_step * index)
+                rescale_height = int(start_height - rescale_height_step * index)
+
+                rescaled_frame = ContentAwareImage(image=self.sequence[index])
+                rescaled_frame.content_aware_scale(rescale_width, rescale_height, start_width, start_height,
+                                                   units_percent=units_percent, use_slow_scaling=use_slow_scaling,
+                                                   delta_x=delta_x, rigidity=rigidity)
+                return rescaled_frame
+
+            # process gifs concurrently for maximum speed
+            with ThreadPoolExecutor() as executor:
+                sequence = list(executor.map(_rescale_frame, range(num_frames)))
+            # replace the old frames in the sequence with the new ones
+            self.sequence.extend(sequence)
+            del self.sequence[:int(len(self.sequence) / 2)]
+            # free the generated frames from memory
+            for frame in sequence:
+                frame.close()
         else:
+            original_width, original_height = self.original_size
+            if units_percent:
+                width = int(original_width * float(width) / 100)
+                height = int(original_height * float(height) / 100)
+                start_width = int(original_width * float(start_width) / 100)
+                start_height = int(original_height * float(start_height) / 100)
+
             if not use_slow_scaling:
                 library.MagickLiquidRescaleImage(self.wand, width, height, float(delta_x), float(rigidity))
                 library.MagickSampleImage(self.wand, original_width, original_height)
@@ -75,8 +78,7 @@ class ContentAwareImage(Image):
                                           int(float(original_height) / height * original_height))
                 library.MagickLiquidRescaleImage(self.wand, original_width, original_height, float(delta_x),
                                                  float(rigidity))
-
-        library.MagickSetSize(self.wand, original_width, original_height)
+                library.MagickSetSize(self.wand, original_width, original_height)
 
         try:
             self.raise_exception()
