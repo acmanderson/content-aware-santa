@@ -1,53 +1,24 @@
 import os
 import traceback
-from base64 import b64encode, b64decode
+from base64 import b64encode
 
 from flask import Flask, request, jsonify
-from schema import Schema, And, Use, Optional, SchemaError
-
-from content_aware_image import ContentAwareImage
+from request_schema import validate, SchemaError
 
 app = Flask(__name__)
-
-RESCALE_DEFAULT = 50
-RESCALE_SCHEMA = And(Use(int), lambda n: n > 0)
-
-
-def debug():
-    return app.debug or os.getenv('STAGE') == 'dev'
-
-
-def base64_to_image(b64):
-    try:
-        decoded = b64decode(b64)
-        return ContentAwareImage(blob=decoded)
-    except Exception as e:
-        if debug():
-            raise e
-        else:
-            # raise generic error that is appropriate to return to a user
-            raise SchemaError("Could not decode image.")
-
-
-schema = Schema({
-    'image': Use(base64_to_image),
-    Optional('rescale_width', default=RESCALE_DEFAULT): RESCALE_SCHEMA,
-    Optional('rescale_height', default=RESCALE_DEFAULT): RESCALE_SCHEMA,
-    Optional('start_width'): RESCALE_SCHEMA,
-    Optional('start_height'): RESCALE_SCHEMA,
-})
+app.config['IN_DEBUG'] = lambda: app.debug or os.getenv('STAGE') == 'dev'
 
 
 @app.errorhandler(SchemaError)
 def handle_schema_error(error):
-    response = jsonify({'message': str(error), 'error': True})
+    response = jsonify({'message': str(error).split()[-1], 'error': True})
     response.status_code = 400
     return response
 
 
 @app.errorhandler(Exception)
 def handle_exception(_):
-    if debug():
+    if app.config['IN_DEBUG']():
         message = traceback.format_exc()
     else:
         message = 'An error occurred.'
@@ -58,7 +29,7 @@ def handle_exception(_):
 
 @app.route('/', methods=['POST'])
 def index():
-    body = schema.validate(request.get_json())
+    body = validate(request.get_json())
     image = body['image']
     rescale_width = body['rescale_width']
     rescale_height = body['rescale_height']
