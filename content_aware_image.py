@@ -53,7 +53,7 @@ class ContentAwareImage(Image):
                 return rescaled_frame
 
             # process gifs concurrently for maximum speed
-            with ThreadPoolExecutor() as executor:
+            with ThreadPoolExecutor(max_workers=None) as executor:
                 sequence = list(executor.map(_rescale_frame, range(num_frames)))
             # replace the old frames in the sequence with the new ones
             self.sequence.extend(sequence)
