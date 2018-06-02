@@ -2,7 +2,7 @@ FROM lambci/lambda:build
 
 ENV BASE_DIR /var/task
 ENV LQR_VERSION 0.4.2
-ENV IMAGEMAGICK_VERSION 6.9.7-7
+ENV IMAGEMAGICK_VERSION 6.9.9-49
 ENV PKG_CONFIG_PATH /usr/lib/pkgconfig/:$PKG_CONFIG_PATH
 
 RUN yum install -y \
