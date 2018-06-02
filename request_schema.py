@@ -57,9 +57,9 @@ def validate(body):
     :param body:
     :return:
     """
-    # build schema as an Or between BASE_SCHEMA + the image decoders
+    # build schema as an Or between (BASE_SCHEMA + image decoder) for each image decoder
     schema = Schema(Or(
-        *(dict(BASE_SCHEMA, **{name: Use(decode_image(function))}) for name, function in image_decoders.items())
+        *(dict(BASE_SCHEMA, **{name: Use(decode_image(fn))}) for name, fn in image_decoders.items())
     ))
     body = schema.validate(body)
     image = None

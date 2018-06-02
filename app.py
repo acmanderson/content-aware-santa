@@ -6,6 +6,7 @@ from flask import Flask, request, jsonify
 from request_schema import validate, SchemaError
 
 app = Flask(__name__)
+# debug state can depend on Flask's debug or the STAGE environment variable Zappa sets in Lambda
 app.config['IN_DEBUG'] = lambda: app.debug or os.getenv('STAGE') == 'dev'
 
 

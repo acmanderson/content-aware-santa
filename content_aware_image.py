@@ -36,6 +36,11 @@ class ContentAwareImage(Image):
             raise TypeError('rigidity must be a float, not ' + repr(rigidity))
 
         if self.animation:
+            # scale each frame in the image, linearly scaling the rescale amount per frame
+            # if start_width/height != rescale_width/height
+
+            # coalesce outputs each frame as the viewer sees it instead of in its optimized form, as rescaling a
+            # non-coalesced image results in artifacts on the optimized frames
             self.wand = library.MagickCoalesceImages(self.wand)
 
             num_frames = len(self.sequence)
@@ -62,6 +67,7 @@ class ContentAwareImage(Image):
             for frame in sequence:
                 frame.close()
         else:
+            # scale an individual frame or non-animated image
             original_width, original_height = self.original_size
             if units_percent:
                 width = int(original_width * float(width) / 100)
@@ -73,6 +79,8 @@ class ContentAwareImage(Image):
                 library.MagickLiquidRescaleImage(self.wand, width, height, float(delta_x), float(rigidity))
                 library.MagickSampleImage(self.wand, original_width, original_height)
             else:
+                # upscaling the image before downscaling it with liquid rescale can produce different/better results,
+                # but is a lot slower
                 library.MagickSampleImage(self.wand,
                                           int(float(original_width) / width * original_width),
                                           int(float(original_height) / height * original_height))

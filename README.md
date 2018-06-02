@@ -1,5 +1,5 @@
 # content-aware-santa
-AWS API Gateway/Lambda Flask service for liquid-rescaling images using ImageMagick inspired by http://contentawaresatan.com/
+Flask service for liquid-rescaling images using ImageMagick inspired by http://contentawaresatan.com/, deployable on AWS API Gateway/Lambda.
 
 ## Examples
 ![before](https://i.imgur.com/NyuJLXs.gif) -> ![after](https://i.imgur.com/zmgMAeq.gif)
