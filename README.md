@@ -9,7 +9,7 @@ Flask service for liquid-rescaling images using ImageMagick inspired by http://c
     * On macOS these can be installed together with [Homebrew](https://brew.sh/) by running `brew install imagemagick@6 --with-liblqr`.
 
 ## Usage
-After installing dependencies, the service can be run locally with `python app.py`. This starts an HTTP server, and you can begin making requests. Requests are `POST`s to the root of the service, e.g. `http://localhost:8080/`, and are JSON blobs with the following fields:
+Building `Dockerfile.debian` will result in an image with the service and its dependencies installed. This can be done with `run_debian.sh`. Alternately, the service can be run locally with `python app.py` after installing its dependencies. This starts an HTTP server, and you can begin making requests. Requests are `POST`s to the root of the service, e.g. `http://localhost:5000/`, and are JSON blobs with the following fields:
 
 One of:
 * `image_base64` (string) - base64 string of the image to be rescaled
